@@ -2,6 +2,7 @@ from datetime import timedelta
 import ast
 import pandas as pd
 import numpy as np
+import math
 
 
 def inquire_col(col, df):
@@ -194,24 +195,39 @@ def get_outcomes(events):
     )
 
     # negative actions
-    negative_actions = ['Miscontrol', 'Foul Committed', 'Dispossessed',
-                        'Dribbled Past', 'Bad Behaviour', 'Error', 'Injury Stoppage', ]
+    negative_actions = ['Miscontrol',
+                        'Foul Committed',
+                        'Dispossessed',
+                        'Dribbled Past',
+                        'Bad Behaviour',
+                        'Error',
+                        'Injury Stoppage',
+                        ]
     events.loc[events['type'].isin(negative_actions), 'outcome'] = 0
 
     # positive actions
-    positive_actions = ['Clearance', 'Foul Won',
-                        'Carry', 'Pressure', 'Shield',]
+    positive_actions = ['Clearance',
+                        'Foul Won',
+                        'Carry',
+                        'Pressure',
+                        'Shield',
+                        ]
     events.loc[events['type'].isin(positive_actions), 'outcome'] = 1
 
     # neutral actions
-    neutral_actions = ['Referee Ball-Drop', 'Player Off',
-                       'Player On', 'Tactical Shift', 'Starting XI', 'Half Start']
+    neutral_actions = ['Referee Ball-Drop',
+                       'Player Off',
+                       'Player On',
+                       'Tactical Shift',
+                       'Starting XI',
+                       'Half Start',
+                       ]
     events.loc[events['type'].isin(neutral_actions), 'outcome'] = -1
 
     return events
 
 
-def get_action_series(actions, convert_location:bool):
+def get_action_series(actions, convert_location: bool):
 
     action_series = dict()
     for i in range(11):
@@ -225,19 +241,24 @@ def get_action_series(actions, convert_location:bool):
         action_series[f'type_{i}'] = actions['type'].iloc[i]
         action_series[f'outcome_{i}'] = actions['outcome'].iloc[i]
         action_series[f'player_{i}'] = actions['player'].iloc[i]
-    
+
         if convert_location == True:
             if action_series[f'team_{i}'] != actions['team'].iloc[10]:
-                action_series[f'location_x_{i}'] = 120 - actions['location_x'].iloc[i]
-                action_series[f'location_y_{i}'] = 80 - actions['location_y'].iloc[i]
-                action_series[f'end_location_x_{i}'] = 120 - actions['end_location_x'].iloc[i]
-                action_series[f'end_location_y_{i}'] = 80 - actions['end_location_y'].iloc[i]
+                action_series[f'location_x_{i}'] = 120 - \
+                    actions['location_x'].iloc[i]
+                action_series[f'location_y_{i}'] = 80 - \
+                    actions['location_y'].iloc[i]
+                action_series[f'end_location_x_{i}'] = 120 - \
+                    actions['end_location_x'].iloc[i]
+                action_series[f'end_location_y_{i}'] = 80 - \
+                    actions['end_location_y'].iloc[i]
 
     action_series['match_id'] = actions['match_id'].iloc[0]
     action_series['shot_id'] = actions['shot_id'].iloc[0]
+    action_series['shot_statsbomb_xg'] = actions['shot_statsbomb_xg'].iloc[10]
 
-    return pd.DataFrame(action_series,
-                        index=[0])    
+    return pd.DataFrame(action_series, index=[0])
+
 
 def events_to_df(events: pd.DataFrame, is_convert_location=True):
     events = type_handling(events)
@@ -247,3 +268,46 @@ def events_to_df(events: pd.DataFrame, is_convert_location=True):
         lambda x: get_action_series(x, convert_location=is_convert_location)).reset_index(drop=True)
 
     return df
+
+
+def df_to_X_y(df: pd.DataFrame):
+
+    y = df['outcome_10'].values
+    X = df.copy()
+
+    # convert teams
+    for i in range(11):
+        X[f'team_{i}'] = X.apply(
+            lambda x: 1 if x[f'team_{i}'] == x['team_10']
+            else 0,
+            axis=1
+        )
+
+    # shot angle
+    X['shot_angle'] = X.apply(
+        lambda x: math.atan2(
+            x['end_location_y_10'] - x['location_y_10'],
+            x['end_location_x_10'] - x['location_x_10']
+        ),
+        axis=1
+    )
+
+    # drop columns
+    X = X.drop(
+        columns=['match_id', 'shot_id']
+        + [f'player_{i}' for i in range(11)]
+        + ['end_location_x_10',
+           'end_location_y_10',
+            'outcome_10',
+            'type_10',
+            'shot_statsbomb_xg']
+    )
+
+    X = X.reset_index(drop=True)
+
+    # dropna
+    X = X.dropna()
+    y = y[X.index.tolist()]
+    X = X.reset_index(drop=True)
+
+    return X, y
