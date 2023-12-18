@@ -1,3 +1,5 @@
+import plotly.express as px
+import plotly.graph_objects as go
 from sklearn.preprocessing import OneHotEncoder, MinMaxScaler
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
@@ -8,9 +10,9 @@ import shap
 import eventstox
 import matplotlib
 from mplsoccer import Pitch
+from scipy.ndimage import gaussian_filter
 
 
-# colors
 class Colors:
 
     yale_blue = "#033270"
@@ -37,7 +39,7 @@ def process_X(X):
     return X
 
 
-def get_shap_df(df: pd.DataFrame):
+def get_shap_by_feature(df: pd.DataFrame):
 
     d = df.copy()
 
@@ -69,6 +71,7 @@ def get_shap_df(df: pd.DataFrame):
                       'shot_id'
                       ]
     shap_df[columns_to_add] = d[columns_to_add]
+    shap_df['probability'] = lgb.predict(X)
 
     return shap_df
 
@@ -98,6 +101,9 @@ def sum_shap_by_action(shap_df: pd.DataFrame):
          'shot_angle']
     ].sum(axis=1, numeric_only=True)
 
+    # probability
+    shap_actions_df['probability'] = shap_df['probability']
+
     return shap_actions_df
 
 
@@ -121,12 +127,14 @@ def get_team_status(x: pd.Series):
 
 def get_shap_by_action(df: pd.DataFrame):
 
-    shap_df = get_shap_df(df)
+    df = df.reset_index(drop=True)
+
+    shap_df = get_shap_by_feature(df)
     shap_actions_df = sum_shap_by_action(shap_df=shap_df)
 
     shap_actions_df = pd.concat(
         [shap_actions_df, df],
-        axis=1
+        axis=1,
     )
 
     shap_actions_df = shap_actions_df.apply(
@@ -195,6 +203,12 @@ def plot_shap_barh(actions):
 
     # title
     ax.set_title(is_goal(x['outcome_10']))
+    ax.set_title(
+        f"xG: {round(x['shot_statsbomb_xg'], 2)}\nProbability: {round(x['probability'], 2)}",
+        loc='left',
+        color='dimgray',
+        fontweight='bold',
+    )
 
     # set legends
     celestial_blue_patch = mpatches.Patch(
@@ -214,6 +228,11 @@ def plot_shap_barh(actions):
 
 
 def plot_shap_on_pitch(actions):
+    """
+
+    Plot corresponding action series on the pitch.
+
+    """
 
     x = actions.copy()
     pitch = Pitch(pitch_color='white', line_color='gray')
@@ -240,8 +259,22 @@ def plot_shap_on_pitch(actions):
             s=10,
             color=team_colors[i]
         )
+        pitch.text(
+            x[f'location_x_{i}'] + 1,
+            x[f'location_y_{i}'],
+            s=str(i),
+            color='dimgray',
+            fontweight='bold',
+            ax=ax,
+        )
 
     ax.set_title(is_goal(x['outcome_10']))
+    ax.set_title(
+        f"xG: {round(x['shot_statsbomb_xg'], 2)}\nProbability: {round(x['probability'], 2)}",
+        loc='left',
+        color='dimgray',
+        fontweight='bold',
+    )
 
     # set legends
     offensive_patch = mpatches.Patch(
@@ -282,6 +315,7 @@ def melt_shap_actions(x):
 
 
 def get_shap_per_action_df(shap_actions_df):
+    """transform the shap values from action series to each action."""
 
     shap_per_action_df = pd.concat(
         [
@@ -291,7 +325,6 @@ def get_shap_per_action_df(shap_actions_df):
         ignore_index=True)
 
     return shap_per_action_df
-
 
 
 def get_player_shap(player: str, shap_per_action_df: pd.DataFrame):
@@ -326,6 +359,8 @@ def get_player_shap(player: str, shap_per_action_df: pd.DataFrame):
         else x[['location_y', 'end_location_y']],
         axis=1
     )
+
+    player_df = player_df.reset_index(drop=True)
 
     return player_df
 
@@ -392,7 +427,7 @@ def player_summary(player_df: pd.DataFrame):
                loc='upper right'
                )
 
-    return player_df_grouped
+    return player_df_grouped, fig
 
 
 def aggregate(d: pd.DataFrame, num_actions: int = 3):
@@ -496,3 +531,134 @@ def encode_standardize(X: pd.DataFrame):
     )] = encoder.transform(X[categorical_features])
 
     return X_scaled
+
+
+def plot_player_mean_shap_by_match(shap_per_action_df):
+    """Returns a scatter plot of each player's mean SHAP value and number of actions in a match."""
+
+    shap_grouped_by_player_df = shap_per_action_df.groupby(
+        ['player', 'team'])['shap'].agg(
+        ['mean', 'count']
+    ).reset_index()
+
+    reference_line_mean = (
+        shap_grouped_by_player_df['count'] * shap_grouped_by_player_df['mean']).mean()
+
+    fig = go.Figure(
+        data=[
+            go.Scatter(
+                x=shap_grouped_by_player_df['count'],
+                y=shap_grouped_by_player_df['mean'],
+                mode='markers',
+                text=[
+                    f"Player: {player}<br>Team: {team}"
+                    for player, team in zip(
+                        shap_grouped_by_player_df['player'],
+                        shap_grouped_by_player_df['team'],
+                    )
+                ],
+                hovertemplate='%{text}<br>Number of actions: %{x}<br>Mean shap: %{y:.2f}',
+                marker=dict(
+                    color=[
+                        Colors.tomato if
+                        team == shap_grouped_by_player_df['team'].iloc[0]
+                        else Colors.celestial_blue
+                        for team in shap_grouped_by_player_df['team']
+                    ],
+                    size=shap_grouped_by_player_df['count'],
+                ),
+                name="",
+            ),
+        ]
+    )
+
+    fig.update_layout(
+        margin=dict(l=0, r=0, t=0, b=0)
+    )
+    return fig
+
+
+def player_heatmap(player: str, shap_per_action_df: pd.DataFrame):
+    "Plot the player's heatmap on the pitch."
+
+    player_shap_df = get_player_shap(
+        player=player,
+        shap_per_action_df=shap_per_action_df
+    )
+
+    pitch = Pitch(
+        pitch_color='white',
+        line_color='gray',
+        line_zorder=2,
+    )
+    fig, ax = pitch.draw()
+
+    bin_statistic = pitch.bin_statistic(
+        player_shap_df['location_x'],
+        player_shap_df['location_y'],
+        statistic='count',
+        bins=(30, 30),
+    )
+
+    bin_statistic['statistic'] = gaussian_filter(bin_statistic['statistic'], 1)
+
+    pitch.heatmap(
+        bin_statistic,
+        ax=ax,
+        cmap='gist_heat_r',
+        edgecolors=None
+    )
+
+    fig.suptitle(f"Player Heatmap - {player}")
+    ax.set_title(
+        f"Mean SHAP: {round(np.mean(player_shap_df['shap']), 2)}",
+        loc='left',
+        color='dimgray',
+        fontweight='bold',
+        fontsize=9,
+    )
+
+    return fig
+
+
+def team_heatmap(team: str, shap_per_action_df: pd.DataFrame):
+    """
+    Plot the player's heatmap on the pitch.
+    """
+
+    team_shap_df = shap_per_action_df.loc[shap_per_action_df['team'] == team]
+    team_shap_df[['location_x', 'location_y']] = team_shap_df[['location_x', 'location_y']].astype('float')
+
+    pitch = Pitch(
+        pitch_color='white',
+        line_color='gray',
+        line_zorder=2,
+    )
+    fig, ax = pitch.draw()
+
+    bin_statistic = pitch.bin_statistic(
+        team_shap_df['location_x'],
+        team_shap_df['location_y'],
+        statistic='count',
+        bins=(30, 30),
+    )
+
+    bin_statistic['statistic'] = gaussian_filter(bin_statistic['statistic'], 1)
+
+    pitch.heatmap(
+        bin_statistic,
+        ax=ax,
+        cmap='gist_heat_r',
+        edgecolors=None
+    )
+
+    fig.suptitle(f"{team}")
+    ax.set_title(
+        f"Mean SHAP: {round(np.mean(team_shap_df['shap']), 2)}",
+        loc='left',
+        color='dimgray',
+        fontweight='bold',
+        fontsize=9,
+    )
+
+    return fig
