@@ -1,0 +1,3 @@
+### SHAP Values
+
+Following the training of the LightGBM model, SHAP models are employed to assess feature importance. The advantage of SHAP lies in its ability to assign feature importance to each individual example, enhancing interpretability. Furthermore, SHAP values are additive, enabling the evaluation of each action's performance, as well as the overall performance of players and teams during a match or a season.
