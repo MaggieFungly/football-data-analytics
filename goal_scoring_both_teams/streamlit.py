@@ -6,51 +6,40 @@ import eventstox
 import matplotlib.pyplot as plt
 import plotly.express as px
 
+# Initialize SQL connection for data retrieval
 conn = st.experimental_connection('ftdataconnection', type='sql')
 
 
 def get_query_data(key: str):
+    # Query to get distinct seasons from matches
+    seasons = conn.query("SELECT DISTINCT season FROM matches;")
 
-    seasons = conn.query(
-        """
-    SELECT DISTINCT season FROM matches;
-    """
-    )
-
+    # Streamlit interface for season and match selection
     col1, col2, = st.columns(2)
     with col1:
         selected_season = st.selectbox(
-            label="Season",
-            options=seasons,
-            key=f"{key}_select_season",
-        )
+            label="Season", options=seasons, key=f"{key}_select_season")
 
-    matches = conn.query(
-        f"""
-    SELECT home_team, away_team, home_score, away_score, match_id
-    FROM matches
-    WHERE season = '{selected_season}'
-    """
-    )
+    # Query to get matches for the selected season
+    matches = conn.query(f"""
+        SELECT home_team, away_team, home_score, away_score, match_id
+        FROM matches
+        WHERE season = '{selected_season}'
+    """)
+    # Formatting match information for display
     matches['match'] = matches.apply(
-        lambda x: f"{x['home_team']} {x['home_score']} : {x['away_score']} {x['away_team']}",
-        axis=1
-    )
-    season_dict = {
-        '2018/2019': '1819',
-        '2019/2020': '1920',
-        '2020/2021': '2021',
-    }
+        lambda x: f"{x['home_team']} {x['home_score']} : {x['away_score']} {x['away_team']}", axis=1)
+
+    # Season dictionary for file mapping
+    season_dict = {'2018/2019': '1819',
+                   '2019/2020': '1920', '2020/2021': '2021'}
     with col2:
         selected_match = st.selectbox(
-            label="Match",
-            options=matches['match'],
-            key=f"{key}_select_match"
-        )
+            label="Match", options=matches['match'], key=f"{key}_select_match")
     selected_match_id = matches.loc[matches['match']
                                     == selected_match, 'match_id'].iloc[0]
 
-    # get corresponding data
+    # Retrieve and filter data for the selected match
     selected_df = pd.read_csv(f"df_{season_dict[selected_season]}.csv")
     selected_df = selected_df.loc[selected_df['match_id'] == int(
         selected_match_id)]
@@ -59,10 +48,9 @@ def get_query_data(key: str):
 
 
 def get_shap(df):
-
+    # Preprocessing data and calculating SHAP values
     X, y = eventstox.df_to_X_y(df)
     X = models.process_X(X)
-
     shap_df = models.get_shap_by_feature(df)
     shap_actions_df = models.get_shap_by_action(df)
 
@@ -70,133 +58,81 @@ def get_shap(df):
 
 
 def get_selected_series(shap_actions_df):
+    # Streamlit interface for selecting offensive team and action series
     selected_offensive_team = st.radio(
-        label="Offensive Team",
-        options=shap_actions_df['offensive_team'].unique(),
-        horizontal=True
-    )
+        label="Offensive Team", options=shap_actions_df['offensive_team'].unique(), horizontal=True)
+    selected_series_id = st.slider("Action Series", min_value=0, max_value=len(
+        shap_actions_df.loc[shap_actions_df['offensive_team'] == selected_offensive_team]) - 1)
 
-    selected_series_id = st.slider(
-        "Action Series",
-        min_value=0,
-        max_value=len(
-            shap_actions_df.loc[
-                shap_actions_df['offensive_team'] == selected_offensive_team
-            ]
-        ) - 1
-    )
-
-    selected_series = shap_actions_df.loc[
-        shap_actions_df['offensive_team'] == selected_offensive_team
-    ].iloc[selected_series_id]
+    selected_series = shap_actions_df.loc[shap_actions_df['offensive_team']
+                                          == selected_offensive_team].iloc[selected_series_id]
 
     return selected_series
 
 
+# Application title
 st.title("Identifying Goal Scoring Opportunities in WSL Games")
 
-# load data
+# Load datasets for different seasons
 df_1819 = pd.read_csv("df_1819.csv")
 df_1920 = pd.read_csv("df_1920.csv")
 df_2021 = pd.read_csv("df_2021.csv")
 
-
-# load models
+# Load the machine learning model
 lgb = joblib.load('lgb.joblib')
 
-
-# intro
+# Introduction to LightGBM
 with open("./lightgbm_intro.md", 'r', encoding='utf-8') as file:
     lightgbm_intro = file.read()
     file.close()
-
 st.markdown(lightgbm_intro)
 
-
-# model training
+# Model training process
 with open("./model_training.md", 'r', encoding='utf-8') as file:
     model_training = file.read()
     file.close()
-
 st.markdown(model_training)
 
-
-# SHAP values
+# Introduction to SHAP values
 with open("./shap_intro.md", 'r', encoding='utf-8') as file:
     shap_intro = file.read()
     file.close()
-
 st.markdown(shap_intro)
 
-
-# match analysis
+# Match Analysis Section
 st.markdown("## Match Analysis")
-
 df = get_query_data('match_results')
 shap_df, shap_actions_df = get_shap(df)
 
-# action series
+# Action Series Analysis
 st.markdown("### Action Series Analysis")
 selected_series = get_selected_series(shap_actions_df)
-
 st.pyplot(models.plot_shap_on_pitch(selected_series))
 st.pyplot(models.plot_shap_barh(selected_series))
 
-# Player evaluation
+# Player Evaluation Section
 st.markdown("### Player Evaluation")
-
 shap_per_action_df = models.get_shap_per_action_df(shap_actions_df)
-
-st.plotly_chart(
-    models.plot_player_mean_shap_by_match(
-        shap_per_action_df
-    ),
-    use_container_width=True,
-)
+st.plotly_chart(models.plot_player_mean_shap_by_match(
+    shap_per_action_df), use_container_width=True)
 
 selected_player = st.selectbox(
-    label="Player",
-    options=shap_per_action_df['player'].unique()
-)
-st.pyplot(
-    models.player_heatmap(selected_player, shap_per_action_df),
-    use_container_width=True
-)
+    label="Player", options=shap_per_action_df['player'].unique())
+st.pyplot(models.player_heatmap(selected_player,
+          shap_per_action_df), use_container_width=True)
 
-# team performance
-st.markdown("### Team Evaluation")
-
-selected_team = st.radio(
-    label='Team',
-    options=shap_per_action_df['team'].unique(),
-    horizontal=True,
-)
-
-st.pyplot(
-    models.team_heatmap(
-        team=selected_team,
-        shap_per_action_df=shap_per_action_df
-    ),
-    use_container_width=True
-)
-
+# Individual Player Analysis
 st.markdown("## Player Analysis")
-
 st.markdown("### Clustering")
-seasons = conn.query(
-    """
-    SELECT DISTINCT season FROM matches;
-    """
-)
+seasons = conn.query("SELECT DISTINCT season FROM matches;")
 selected_season = st.selectbox("Season", seasons)
-season_dict = {
-    '2018/2019': '1819',
-    '2019/2020': '1920',
-    '2020/2021': '2021',
-}
+season_dict = {'2018/2019': '1819', '2019/2020': '1920', '2020/2021': '2021'}
 
 df = pd.read_csv(f"df_{season_dict[selected_season]}.csv")
 shap_df, shap_actions_df = get_shap(df)
 shap_per_action_df = models.get_shap_per_action_df(shap_actions_df)
 player_top_actions_df = models.get_player_top_actions(shap_per_action_df)
 
+player_clustering_fig = models.clustering_players(
+    player_top_actions_df=player_top_actions_df)
+st.pyplot(player_clustering_fig)
