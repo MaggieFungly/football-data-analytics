@@ -180,4 +180,23 @@ st.pyplot(
     use_container_width=True
 )
 
+st.markdown("## Player Analysis")
+
+st.markdown("### Clustering")
+seasons = conn.query(
+    """
+    SELECT DISTINCT season FROM matches;
+    """
+)
+selected_season = st.selectbox("Season", seasons)
+season_dict = {
+    '2018/2019': '1819',
+    '2019/2020': '1920',
+    '2020/2021': '2021',
+}
+
+df = pd.read_csv(f"df_{season_dict[selected_season]}.csv")
+shap_df, shap_actions_df = get_shap(df)
+shap_per_action_df = models.get_shap_per_action_df(shap_actions_df)
+player_top_actions_df = models.get_player_top_actions(shap_per_action_df)
 

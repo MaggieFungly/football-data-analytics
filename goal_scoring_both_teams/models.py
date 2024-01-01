@@ -434,60 +434,41 @@ def aggregate(d: pd.DataFrame, num_actions: int = 3):
 
     player = d['player'].iloc[0]
 
-    d['is_offensive'] = d.apply(
-        lambda x: 1 if x['team'] == x['offensive_team']
-        else 0,
-        axis=1
-    )
+    # Vectorized calculation of 'is_offensive' column
+    d['is_offensive'] = np.where(d['team'] == d['offensive_team'], 1, 0)
 
-    d = d[
-        ['shap', 'type', 'location_x', 'location_y',
-         'end_location_x', 'end_location_y', 'is_offensive'
-         ]
-    ]
+    # Select only necessary columns
+    d = d[['shap', 'type', 'location_x', 'location_y',
+           'end_location_x', 'end_location_y', 'is_offensive']]
 
-    d_grouped = d.groupby(['type', 'is_offensive']).agg(
-        {
-            'shap': ['mean', 'std'],
-            'location_x': ['mean', 'std'],
-            'location_y': ['mean', 'std'],
-            'end_location_x': ['mean', 'std'],
-            'end_location_y': ['mean', 'std'],
-            'type': 'count',
-        }
-    ).reset_index()
+    # Groupby aggregation using a dictionary
+    agg_dict = {
+        'shap': ['mean', 'std'],
+        'location_x': ['mean', 'std'],
+        'location_y': ['mean', 'std'],
+        'end_location_x': ['mean', 'std'],
+        'end_location_y': ['mean', 'std'],
+        'type': 'count',
+    }
+    d_grouped = d.groupby(['type', 'is_offensive']).agg(agg_dict).reset_index()
 
-    d_grouped = d_grouped.sort_values(
-        by=[('type', 'count')],
-        ascending=False
-    )
+    # Get the top num_actions rows without sorting the entire DataFrame
+    d_grouped = d_grouped.nlargest(num_actions, ('type', 'count')).melt()
 
-    d_grouped = d_grouped.head(num_actions).melt()
-
+    # Use f-strings for string concatenation
     d_grouped['index'] = d_grouped.apply(
-        lambda x:
-        x['variable_0'] + '_' + x['variable_1']
-        if x['variable_1'] != ''
-        else x['variable_0'],
-        axis=1
-    )
+        lambda x: f'{x["variable_0"]}_{x["variable_1"]}' if x['variable_1'] != '' else x['variable_0'], axis=1)
 
     counts = {}
     result = []
     for item in d_grouped['index']:
-        if item not in counts:
-            counts[item] = 0
-        else:
-            counts[item] += 1
-
+        counts[item] = counts.get(item, 0) + 1
         result.append(f'{item}_{counts[item]}')
+
     d_grouped['index'] = result
 
     s = pd.DataFrame(
-        dict(zip(d_grouped['index'], d_grouped['value'])),
-        index=[player],
-    )
-
+        dict(zip(d_grouped['index'], d_grouped['value'])), index=[player])
     return s
 
 
@@ -659,6 +640,24 @@ def team_heatmap(team: str, shap_per_action_df: pd.DataFrame):
         color='dimgray',
         fontweight='bold',
         fontsize=9,
+    )
+
+    return fig
+
+
+def clustering_players(player_top_actions_df: pd.DataFrame):
+
+    kmeans = joblib.load('kmeans.joblib')
+    isomap = joblib.load('isomap.joblib')
+
+    X_scaled = encode_standardize(player_top_actions_df)
+    X_visualized = isomap.fit_transform(X_scaled)
+
+    fig, ax = plt.subplots()
+    ax.scatter(
+        X_visualized[:, 0],
+        X_visualized[:, 1],
+        c=kmeans.fit_predict(X_scaled)
     )
 
     return fig
