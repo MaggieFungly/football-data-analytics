@@ -675,3 +675,35 @@ def player_clustering_plot(df):
     )
 
     return fig
+
+
+def player_shap_heatmap(player_name, shap_per_action_df):
+    
+    player_df = get_player_shap(player_name, shap_per_action_df)
+
+    pitch = Pitch(
+        pitch_color='white',
+        line_color='gray',
+        line_zorder=2,
+    )
+
+    fig, ax = pitch.draw()
+    bin_statistic = pitch.bin_statistic(
+        x=player_df['location_x'],
+        y=player_df['location_y'],
+        values=player_df['shap'],
+        bins=(30, 30),
+    )
+    heatmap = pitch.heatmap(
+        bin_statistic,
+        ax=ax,
+        cmap='gist_heat_r',
+        edgecolors=None,
+    )
+
+    cbar = fig.colorbar(heatmap, ax=ax)
+    cbar.set_label('SHAP Value')
+
+    ax.set_title(f"Player SHAP Heatmap - {player_name}")
+
+    return fig

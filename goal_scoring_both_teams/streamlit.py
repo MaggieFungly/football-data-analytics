@@ -125,7 +125,6 @@ st.pyplot(models.player_heatmap(selected_player,
 
 # Individual Player Analysis
 st.markdown("## Player Analysis")
-st.markdown("### Clustering")
 
 with open("./clustering.md", 'r', encoding='utf-8') as file:
     clustering_intro = file.read()
@@ -142,7 +141,15 @@ season_dict = {
 }
 df = pd.read_csv(f"df_{season_dict[selected_season]}.csv")
 
-
+st.markdown("### Clustering")
 fig = models.player_clustering_plot(df)
-
 st.plotly_chart(fig, use_container_width=True)
+
+st.markdown('### Player SHAP Heatmap')
+shap_actions_df = models.get_shap_by_action(df)
+shap_per_action_df = models.get_shap_per_action_df(shap_actions_df)
+selected_team = st.selectbox("Team", shap_per_action_df['team'].unique())
+selected_player = st.selectbox(
+    "Player", shap_per_action_df.loc[shap_per_action_df['team']==selected_team, 'player'].unique())
+fig = models.player_shap_heatmap(selected_player, shap_per_action_df)
+st.pyplot(fig)
