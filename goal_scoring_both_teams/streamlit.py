@@ -1,3 +1,5 @@
+import plotly.graph_objects as go
+from sklearn.manifold import Isomap
 import models
 import joblib
 import streamlit as st
@@ -10,7 +12,7 @@ import plotly.express as px
 conn = st.experimental_connection('ftdataconnection', type='sql')
 
 
-def get_query_data(key: str):
+def get_query_match_data(key: str):
     # Query to get distinct seasons from matches
     seasons = conn.query("SELECT DISTINCT season FROM matches;")
 
@@ -101,7 +103,7 @@ st.markdown(shap_intro)
 
 # Match Analysis Section
 st.markdown("## Match Analysis")
-df = get_query_data('match_results')
+df = get_query_match_data('match_results')
 shap_df, shap_actions_df = get_shap(df)
 
 # Action Series Analysis
@@ -124,15 +126,23 @@ st.pyplot(models.player_heatmap(selected_player,
 # Individual Player Analysis
 st.markdown("## Player Analysis")
 st.markdown("### Clustering")
-seasons = conn.query("SELECT DISTINCT season FROM matches;")
-selected_season = st.selectbox("Season", seasons)
-season_dict = {'2018/2019': '1819', '2019/2020': '1920', '2020/2021': '2021'}
 
+with open("./clustering.md", 'r', encoding='utf-8') as file:
+    clustering_intro = file.read()
+    file.close()
+st.markdown(clustering_intro)
+
+
+selected_season = st.selectbox(
+    "Season", ['2018/2019', '2019/2020', '2020/2021'])
+season_dict = {
+    '2018/2019': '1819',
+    '2019/2020': '1920',
+    '2020/2021': '2021'
+}
 df = pd.read_csv(f"df_{season_dict[selected_season]}.csv")
-shap_df, shap_actions_df = get_shap(df)
-shap_per_action_df = models.get_shap_per_action_df(shap_actions_df)
-player_top_actions_df = models.get_player_top_actions(shap_per_action_df)
 
-player_clustering_fig = models.clustering_players(
-    player_top_actions_df=player_top_actions_df)
-st.pyplot(player_clustering_fig)
+
+fig = models.player_clustering_plot(df)
+
+st.plotly_chart(fig, use_container_width=True)

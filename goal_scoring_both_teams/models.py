@@ -1,3 +1,5 @@
+from uu import encode
+import plotly
 import plotly.express as px
 import plotly.graph_objects as go
 from sklearn.preprocessing import OneHotEncoder, MinMaxScaler
@@ -293,37 +295,29 @@ def plot_shap_on_pitch(actions):
     return fig
 
 
-def melt_shap_actions(x):
-    d = pd.DataFrame(
-        {'player': x[[f'player_{i}' for i in range(11)]].values,
-         'team': x[[f'team_{i}' for i in range(11)]].values,
-         'shap': x[[f'shap_{i}' for i in range(11)]].values,
-         'type': x[[f'type_{i}' for i in range(11)]].values,
-         'location_x': x[[f'location_x_{i}' for i in range(11)]].values,
-         'location_y': x[[f'location_y_{i}' for i in range(11)]].values,
-         'end_location_x': x[[f'end_location_x_{i}' for i in range(11)]].values,
-         'end_location_y': x[[f'end_location_y_{i}' for i in range(11)]].values,
-
-         'offensive_team': x['offensive_team'],
-         'defensive_team': x['defensive_team'],
-         'shot_id': x['shot_id'],
-         'match_id': x['match_id']
-         }
-    )
-
+def melt_shap_actions(row):
+    # Create a DataFrame from the row
+    d = pd.DataFrame({
+        'player': row[[f'player_{i}' for i in range(11)]].values,
+        'team': row[[f'team_{i}' for i in range(11)]].values,
+        'shap': row[[f'shap_{i}' for i in range(11)]].values,
+        'type': row[[f'type_{i}' for i in range(11)]].values,
+        'location_x': row[[f'location_x_{i}' for i in range(11)]].values,
+        'location_y': row[[f'location_y_{i}' for i in range(11)]].values,
+        'end_location_x': row[[f'end_location_x_{i}' for i in range(11)]].values,
+        'end_location_y': row[[f'end_location_y_{i}' for i in range(11)]].values,
+        'offensive_team': row['offensive_team'],
+        'defensive_team': row['defensive_team'],
+        'shot_id': row['shot_id'],
+        'match_id': row['match_id']
+    })
     return d
 
 
 def get_shap_per_action_df(shap_actions_df):
-    """transform the shap values from action series to each action."""
-
-    shap_per_action_df = pd.concat(
-        [
-            melt_shap_actions(row)
-            for index, row in shap_actions_df.iterrows()
-        ],
-        ignore_index=True)
-
+    # Use apply to transform each row and concatenate the results
+    shap_per_action_df = pd.concat(shap_actions_df.apply(
+        melt_shap_actions, axis=1).values, ignore_index=True)
     return shap_per_action_df
 
 
@@ -494,16 +488,17 @@ def get_player_top_actions(shap_per_action_df: pd.DataFrame):
     return player_top_actions_df
 
 
-def encode_standardize(X: pd.DataFrame):
+def encode_standardize(X: pd.DataFrame, encoder=None, scaler=None):
 
-    encoder = OneHotEncoder(sparse_output=False, handle_unknown='ignore')
-    scaler = MinMaxScaler((0, 1))
+    if encoder is None:
+        encoder = OneHotEncoder(sparse_output=False, handle_unknown='ignore')
+        encoder.fit(X[categorical_features])
+    if scaler is None:
+        scaler = MinMaxScaler((0, 1))
+        scaler.fit(X[numerical_features])
 
     categorical_features = X.select_dtypes(exclude=['number']).columns.tolist()
     numerical_features = X.select_dtypes(include=['number']).columns.tolist()
-
-    scaler.fit(X[numerical_features])
-    encoder.fit(X[categorical_features])
 
     X_scaled = pd.DataFrame()
 
@@ -511,7 +506,7 @@ def encode_standardize(X: pd.DataFrame):
     X_scaled[encoder.get_feature_names_out(
     )] = encoder.transform(X[categorical_features])
 
-    return X_scaled
+    return X_scaled, encoder, scaler
 
 
 def plot_player_mean_shap_by_match(shap_per_action_df):
@@ -608,7 +603,8 @@ def team_heatmap(team: str, shap_per_action_df: pd.DataFrame):
     """
 
     team_shap_df = shap_per_action_df.loc[shap_per_action_df['team'] == team]
-    team_shap_df[['location_x', 'location_y']] = team_shap_df[['location_x', 'location_y']].astype('float')
+    team_shap_df[['location_x', 'location_y']] = team_shap_df[[
+        'location_x', 'location_y']].astype('float')
 
     pitch = Pitch(
         pitch_color='white',
@@ -645,19 +641,37 @@ def team_heatmap(team: str, shap_per_action_df: pd.DataFrame):
     return fig
 
 
-def clustering_players(player_top_actions_df: pd.DataFrame):
+def player_clustering_plot(df):
 
-    kmeans = joblib.load('kmeans.joblib')
+    shap_actions_df = get_shap_by_action(df)
+    shap_per_action_df = get_shap_per_action_df(shap_actions_df)
+    player_top_actions_df = get_player_top_actions(shap_per_action_df)
+
+    encoder = joblib.load('encoder.joblib')
+    scaler = joblib.load('scaler.joblib')
     isomap = joblib.load('isomap.joblib')
+    em = joblib.load('em.joblib')
 
-    X_scaled = encode_standardize(player_top_actions_df)
-    X_visualized = isomap.fit_transform(X_scaled)
+    X_scaled, encoder, scaler = encode_standardize(
+        player_top_actions_df, encoder=encoder, scaler=scaler)
+    X_visualized = isomap.transform(X_scaled)
 
-    fig, ax = plt.subplots()
-    ax.scatter(
-        X_visualized[:, 0],
-        X_visualized[:, 1],
-        c=kmeans.fit_predict(X_scaled)
+    fig = go.Figure(
+        data=[
+            go.Scatter(
+                x=X_visualized[:, 0],
+                y=X_visualized[:, 1],
+                mode='markers',
+                marker=dict(
+                    color=em.predict(X_scaled),
+                ),
+                text=player_top_actions_df.index,
+            )
+        ]
+    )
+
+    fig.update_layout(
+        margin=dict(l=0, r=0, t=0, b=0)
     )
 
     return fig
