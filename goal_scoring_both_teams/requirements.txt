@@ -1,0 +1,11 @@
+streamlit
+plotly
+sklearn
+matplotlib
+numpy
+pandas
+joblib
+shap
+eventstox
+mplsoccer
+scipy
