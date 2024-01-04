@@ -8,3 +8,4 @@ joblib
 shap
 mplsoccer
 scipy
+sqlalchemy
