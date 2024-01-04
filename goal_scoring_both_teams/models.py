@@ -697,8 +697,10 @@ def player_shap_heatmap(player_name, shap_per_action_df):
     heatmap = pitch.heatmap(
         bin_statistic,
         ax=ax,
-        cmap='gist_heat_r',
+        cmap='RdBu',
         edgecolors=None,
+        vmin=player_df['shap'].min(),
+        vmax=player_df['shap'].max(),
     )
 
     cbar = fig.colorbar(heatmap, ax=ax)
