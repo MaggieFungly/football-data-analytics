@@ -6,6 +6,5 @@ numpy
 pandas
 joblib
 shap
-eventstox
 mplsoccer
 scipy
