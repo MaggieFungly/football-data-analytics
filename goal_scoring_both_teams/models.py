@@ -60,7 +60,7 @@ def get_shap_by_feature(df: pd.DataFrame):
     )
 
     # shap
-    lgb = joblib.load('./lgb.joblib')
+    lgb = joblib.load('./goal_scoring_both_teams/lgb.joblib')
     explainer = shap.TreeExplainer(lgb)
     shap_values = explainer.shap_values(X)
 
@@ -646,10 +646,10 @@ def player_clustering_plot(df):
     shap_per_action_df = get_shap_per_action_df(shap_actions_df)
     player_top_actions_df = get_player_top_actions(shap_per_action_df)
 
-    encoder = joblib.load('./encoder.joblib')
-    scaler = joblib.load('./scaler.joblib')
-    isomap = joblib.load('./isomap.joblib')
-    em = joblib.load('./em.joblib')
+    encoder = joblib.load('./goal_scoring_both_teams/encoder.joblib')
+    scaler = joblib.load('./goal_scoring_both_teams/scaler.joblib')
+    isomap = joblib.load('./goal_scoring_both_teams/isomap.joblib')
+    em = joblib.load('./goal_scoring_both_teams/em.joblib')
 
     X_scaled, encoder, scaler = encode_standardize(
         player_top_actions_df, encoder=encoder, scaler=scaler)

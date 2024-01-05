@@ -8,7 +8,7 @@ import eventstox
 import matplotlib.pyplot as plt
 import plotly.express as px
 
-matches = pd.read_csv("./matches.csv")
+matches = pd.read_csv("./goal_scoring_both_teams/matches.csv")
 
 def get_query_match_data(key: str):
 
@@ -33,7 +33,8 @@ def get_query_match_data(key: str):
                                     == selected_match, 'match_id'].iloc[0]
 
     # Retrieve and filter data for the selected match
-    selected_df = pd.read_csv(f"df_{season_dict[selected_season]}.csv")
+    selected_df = pd.read_csv(
+        f"./goal_scoring_both_teams/df_{season_dict[selected_season]}.csv")
     selected_df = selected_df.loc[selected_df['match_id'] == int(
         selected_match_id)]
 
@@ -67,27 +68,27 @@ def get_selected_series(shap_actions_df):
 st.title("Identifying Goal Scoring Opportunities in WSL Games")
 
 # Load datasets for different seasons
-df_1819 = pd.read_csv("df_1819.csv")
-df_1920 = pd.read_csv("df_1920.csv")
-df_2021 = pd.read_csv("df_2021.csv")
+df_1819 = pd.read_csv("./goal_scoring_both_teams/df_1819.csv")
+df_1920 = pd.read_csv("./goal_scoring_both_teams/df_1920.csv")
+df_2021 = pd.read_csv("./goal_scoring_both_teams/df_2021.csv")
 
 # Load the machine learning model
-lgb = joblib.load('lgb.joblib')
+lgb = joblib.load('./goal_scoring_both_teams/lgb.joblib')
 
 # Introduction to LightGBM
-with open("./lightgbm_intro.md", 'r', encoding='utf-8') as file:
+with open("./goal_scoring_both_teams/lightgbm_intro.md", 'r', encoding='utf-8') as file:
     lightgbm_intro = file.read()
     file.close()
 st.markdown(lightgbm_intro)
 
 # Model training process
-with open("./model_training.md", 'r', encoding='utf-8') as file:
+with open("./goal_scoring_both_teams/model_training.md", 'r', encoding='utf-8') as file:
     model_training = file.read()
     file.close()
 st.markdown(model_training)
 
 # Introduction to SHAP values
-with open("./shap_intro.md", 'r', encoding='utf-8') as file:
+with open("./goal_scoring_both_teams/shap_intro.md", 'r', encoding='utf-8') as file:
     shap_intro = file.read()
     file.close()
 st.markdown(shap_intro)
@@ -117,7 +118,7 @@ st.pyplot(models.player_heatmap(selected_player,
 # Individual Player Analysis
 st.markdown("## Player Analysis")
 
-with open("./clustering.md", 'r', encoding='utf-8') as file:
+with open("./goal_scoring_both_teams/clustering.md", 'r', encoding='utf-8') as file:
     clustering_intro = file.read()
     file.close()
 st.markdown(clustering_intro)
@@ -130,7 +131,8 @@ season_dict = {
     '2019/2020': '1920',
     '2020/2021': '2021'
 }
-df = pd.read_csv(f"df_{season_dict[selected_season]}.csv")
+df = pd.read_csv(
+    f"./goal_scoring_both_teams/df_{season_dict[selected_season]}.csv")
 
 st.markdown("### Clustering")
 fig = models.player_clustering_plot(df)
