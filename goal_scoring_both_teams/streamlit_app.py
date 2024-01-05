@@ -8,26 +8,17 @@ import eventstox
 import matplotlib.pyplot as plt
 import plotly.express as px
 
-# Initialize SQL connection for data retrieval
-conn = st.connection('ftdataconnection', type='sql')
-
+matches = pd.read_csv("matches.csv")
 
 def get_query_match_data(key: str):
-    # Query to get distinct seasons from matches
-    seasons = conn.query("SELECT DISTINCT season FROM matches;")
 
+    seasons = matches['season'].unique().tolist()
     # Streamlit interface for season and match selection
     col1, col2, = st.columns(2)
     with col1:
         selected_season = st.selectbox(
             label="Season", options=seasons, key=f"{key}_select_season")
 
-    # Query to get matches for the selected season
-    matches = conn.query(f"""
-        SELECT home_team, away_team, home_score, away_score, match_id
-        FROM matches
-        WHERE season = '{selected_season}'
-    """)
     # Formatting match information for display
     matches['match'] = matches.apply(
         lambda x: f"{x['home_team']} {x['home_score']} : {x['away_score']} {x['away_team']}", axis=1)
