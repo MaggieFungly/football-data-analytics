@@ -8,7 +8,7 @@ import eventstox
 import matplotlib.pyplot as plt
 import plotly.express as px
 
-matches = pd.read_csv("matches.csv")
+matches = pd.read_csv("./matches.csv")
 
 def get_query_match_data(key: str):
 
