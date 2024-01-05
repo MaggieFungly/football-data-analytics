@@ -9,4 +9,4 @@ shap
 mplsoccer
 scipy
 sqlalchemy
-MySQLdb
+mysqlclient
