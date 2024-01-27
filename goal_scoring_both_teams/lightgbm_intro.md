@@ -1,6 +1,6 @@
 ## Goal Scoring Opportunity Prediction with LightGBM
 
-The presented model uses LightGBM to forecast the likelihood of a goal occurring following a sequence of actions executed by both offensive and defensive teams.
+The presented model uses LightGBM to predict the probability of a goal occurring following a sequence of actions executed by both offensive and defensive teams.
 
 ### Terminology
 
